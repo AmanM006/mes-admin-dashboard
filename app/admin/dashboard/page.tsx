@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
-import { LayoutGrid, ScanLine, Clock, User, LogOut } from "lucide-react";
+import { LayoutGrid, ScanLine, Clock, User, LogOut, Settings } from "lucide-react";
 import OverviewTab from "./components/OverviewTab";
 import ScannerTab from "./components/ScannerTab";
 import HistoryTab from "./components/HistoryTab";
@@ -41,12 +41,11 @@ export default function DashboardPage() {
         </header>
       )}
 
-      {/* MAIN CONTENT: Removed px-4 (Now full width) */}
+      {/* MAIN CONTENT */}
       <main className="flex-1 w-full h-full relative overflow-y-auto no-scrollbar bg-black">
         <AnimatePresence mode="wait">
           
           {activeTab === "home" && (
-            // Added px-6 here individually
             <div className="pt-28 pb-36 px-6">
               <OverviewTab 
                   onScanClick={() => setActiveTab("scan")} 
@@ -62,7 +61,6 @@ export default function DashboardPage() {
           )}
 
           {activeTab === "history" && (
-            // Full width container
             <div className="pt-24 pb-36 min-h-full"> 
               <HistoryTab />
             </div>
@@ -107,7 +105,7 @@ export default function DashboardPage() {
         </GlassSurface>
       </nav>
 
-      {/* PROFILE MODAL */}
+      {/* PROFILE MODAL (RESTORED) */}
       <AnimatePresence>
         {showProfile && (
           <>
@@ -118,12 +116,46 @@ export default function DashboardPage() {
             />
             <motion.div 
               initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
-              className="fixed bottom-0 left-0 right-0 bg-neutral-900 rounded-t-[30px] p-6 z-[90] border-t border-white/10"
+              transition={{ type: "spring", damping: 25, stiffness: 300 }}
+              className="fixed bottom-0 left-0 right-0 bg-neutral-900 rounded-t-[30px] p-6 z-[90] border-t border-white/10 shadow-2xl"
             >
-              {/* Settings content same as before... */}
+              {/* Drag Handle */}
               <div className="w-12 h-1.5 bg-neutral-700 rounded-full mx-auto mb-8" />
-              <button onClick={handleLogout} className="w-full py-4 rounded-xl bg-red-500/10 text-red-500 font-bold flex items-center justify-center gap-3">
-                 <LogOut size={20} /> Log Out
+              
+              {/* User Info Section */}
+              <div className="flex items-center gap-4 mb-8">
+                <div className="w-16 h-16 rounded-full bg-blue-600 flex items-center justify-center text-2xl font-bold text-white shadow-lg shadow-blue-900/20">
+                  A
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-white">Admin User</h3>
+                  <p className="text-neutral-400 text-sm">mes.admin@example.com</p>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="space-y-3">
+              <button 
+   onClick={() => router.push('/admin/settings')} // <--- This makes it navigate
+   className="w-full py-4 rounded-xl bg-neutral-800 text-white font-medium flex items-center justify-center gap-3 hover:bg-neutral-700 transition border border-white/5"
+>
+   <Settings size={20} />
+   Account Settings
+</button>
+                 <button 
+                    onClick={handleLogout}
+                    className="w-full py-4 rounded-xl bg-red-500/10 text-red-500 font-bold flex items-center justify-center gap-3 hover:bg-red-500/20 transition border border-red-500/20"
+                 >
+                    <LogOut size={20} />
+                    Log Out
+                 </button>
+              </div>
+              
+              <button 
+                onClick={() => setShowProfile(false)}
+                className="mt-6 w-full py-4 text-neutral-500 font-medium hover:text-white transition-colors"
+              >
+                Cancel
               </button>
             </motion.div>
           </>
