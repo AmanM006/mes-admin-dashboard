@@ -21,7 +21,7 @@ export default function OverviewTab({
     const fetchStats = async () => {
       try {
         // 👇 Uses localhost for testing
-        const res = await axios.get("http://localhost:8080/api/scan/stats");
+        const res = await axios.get("https://mes-backend-47zl.onrender.com/api/scan/stats");
         
         if (res.data.success) {
            setStats(res.data.stats);

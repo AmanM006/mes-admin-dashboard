@@ -31,7 +31,7 @@ export default function ScannerTab({ onClose }: { onClose: () => void }) {
 
       try {
         // 👇 Uses localhost for testing
-        const response = await axios.post("http://localhost:8080/api/scan/ticket", {
+        const response = await axios.post("https://mes-backend-47zl.onrender.com/api/scan/ticket", {
             encryptedQR: rawValue
         });
 

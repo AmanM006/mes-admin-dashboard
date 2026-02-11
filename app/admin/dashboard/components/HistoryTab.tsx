@@ -22,7 +22,7 @@ export default function HistoryTab() {
     try {
       setLoading(true);
       // 👇 Switched to localhost for testing
-      const res = await axios.get("http://localhost:8080/api/scan/history");
+      const res = await axios.get("https://mes-backend-47zl.onrender.com/api/scan/history");
       if (res.data.success) {
         
         // 🟢 Data Transformation: Map regNumber and fix display days
