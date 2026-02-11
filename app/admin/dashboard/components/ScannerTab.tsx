@@ -1,78 +1,108 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Scanner, IDetectedBarcode } from "@yudiel/react-qr-scanner";
-import { motion, AnimatePresence } from "framer-motion";
-import { X, CheckCircle, ScanLine, Camera } from "lucide-react";
+import { X, CheckCircle, ScanLine, Camera, AlertCircle, Loader2 } from "lucide-react";
+import axios from "axios";
 
 export default function ScannerTab({ onClose }: { onClose: () => void }) {
   const [isScanning, setIsScanning] = useState(false);
-  const [scanResult, setScanResult] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [scanResult, setScanResult] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
+  
+  // Display today's date for the user's reference
+  const [todayDate, setTodayDate] = useState("");
 
-  const handleScan = (detectedCodes: IDetectedBarcode[]) => {
+  useEffect(() => {
+    // Show current date in Indian format to match backend expectations visually
+    setTodayDate(new Date().toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" }));
+  }, []);
+
+  const handleScan = async (detectedCodes: IDetectedBarcode[]) => {
     const rawValue = detectedCodes[0]?.rawValue;
-    if (rawValue) {
+    
+    // Prevent double scanning
+    if (rawValue && !loading && !scanResult && !error) {
+      setLoading(true);
+      setIsScanning(false); // Pause camera
+      
       if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(50);
-      setScanResult(rawValue);
-      setIsScanning(false);
+
+      try {
+        // 👇 Uses localhost for testing
+        const response = await axios.post("http://localhost:8080/api/scan/ticket", {
+            encryptedQR: rawValue
+        });
+
+        if (response.data.success) {
+            setScanResult(response.data);
+        }
+
+      } catch (err: any) {
+        console.error("Scan Error:", err);
+        setError(err.response?.data?.message || "Invalid or Fake Ticket");
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
   const resetScan = () => {
     setScanResult(null);
+    setError(null);
     setIsScanning(true);
   };
 
+  // Helper to determine "Day 1", "Day 2", etc., if backend sends a raw date
+  const getDisplayDay = (dateStr: string) => {
+    if (!dateStr) return "Unknown Date";
+    if (dateStr.includes("10/2") || dateStr.includes("10 Feb")) return "Day 1";
+    if (dateStr.includes("11/2") || dateStr.includes("11 Feb")) return "Day 2";
+    if (dateStr.includes("12/2") || dateStr.includes("12 Feb")) return "Day 3";
+    return dateStr;
+  };
+
   return (
-    <div className="relative w-full h-full flex flex-col bg-black">
+    <div className="fixed inset-0 z-50 w-full h-[100dvh] flex flex-col bg-black overflow-hidden touch-none">
       
-      {/* HEADER (Always visible) */}
-      <div className="absolute top-0 left-0 right-0 p-6 z-20 flex justify-between items-center pt-12 pointer-events-none">
-        {/* Only show "Live" badge if actually scanning */}
-        <div className={`transition-opacity duration-300 ${isScanning ? 'opacity-100' : 'opacity-0'}`}>
-           <span className="text-sm font-bold text-white/80 uppercase tracking-widest bg-black/30 backdrop-blur-md px-3 py-1 rounded-full border border-white/10">
-              Live Camera
-           </span>
-        </div>
-        
-        {/* Close Button - Always clickable */}
-        <button 
-          onClick={onClose}
-          className="pointer-events-auto p-3 bg-neutral-900/50 backdrop-blur-md rounded-full text-white border border-white/10 hover:bg-white/10 transition-colors"
-        >
-          <X size={20} />
-        </button>
+      {/* 🟢 HEADER */}
+      <div className="absolute top-0 left-0 right-0 p-6 z-[60] flex justify-end pt-12 pointer-events-none">
+          <button 
+            onClick={onClose}
+            className="pointer-events-auto p-3 bg-neutral-900/50 backdrop-blur-md rounded-full text-white border border-white/10 active:scale-95 transition-transform"
+          >
+            <X size={20} />
+          </button>
       </div>
 
-      {/* STATE 1: IDLE (The "Ready" Screen you wanted back) */}
-      {!isScanning && !scanResult && (
-        <div className="flex-1 flex flex-col items-center justify-center p-6 animate-in fade-in zoom-in duration-300">
-            {/* Pulsing Icon */}
+      {/* 1. IDLE STATE */}
+      {!isScanning && !scanResult && !error && !loading && (
+        <div className="flex-1 flex flex-col items-center justify-center p-6">
             <div className="relative w-24 h-24 mb-8 flex items-center justify-center">
                 <div className="absolute inset-0 bg-blue-500/20 rounded-3xl blur-xl animate-pulse" />
-                <div className="relative w-24 h-24 bg-neutral-900 border border-white/10 rounded-3xl flex items-center justify-center shadow-2xl">
+                <div className="relative w-24 h-24 bg-neutral-900 border border-white/10 rounded-3xl flex items-center justify-center">
                     <ScanLine size={40} className="text-blue-500" />
                 </div>
             </div>
-
-            <h2 className="text-3xl font-bold text-white mb-3 tracking-tight">Ticket Scanner</h2>
-            <p className="text-neutral-400 text-center max-w-[260px] leading-relaxed mb-10">
-                Ready to verify attendees. Tap below to activate the camera.
+            <h2 className="text-2xl font-bold text-white mb-2">Ticket Scanner</h2>
+            <p className="text-neutral-500 text-sm mb-8">
+               Active Date: <span className="text-white font-mono">{todayDate}</span>
             </p>
-
+            
             <button
                 onClick={() => setIsScanning(true)}
-                className="group relative w-full max-w-xs bg-white text-black font-bold py-4 rounded-full text-lg shadow-[0_0_20px_rgba(255,255,255,0.2)] hover:shadow-[0_0_30px_rgba(255,255,255,0.4)] hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3"
+                className="px-10 py-5 bg-white text-black font-bold rounded-full flex items-center gap-2 hover:scale-105 transition shadow-[0_0_30px_rgba(255,255,255,0.2)]"
             >
-                <Camera size={20} />
-                <span>Scan QR Code</span>
+                <Camera size={20} /> 
+                Start Scanning
             </button>
         </div>
       )}
 
-      {/* STATE 2: ACTIVE SCANNER */}
+      {/* 2. SCANNING STATE */}
       {isScanning && (
-        <div className="flex-1 relative overflow-hidden flex items-center justify-center bg-black">
+        <div className="flex-1 relative w-full h-full bg-black overflow-hidden">
             <div className="absolute inset-0 w-full h-full">
                 <Scanner
                     onScan={handleScan}
@@ -85,50 +115,99 @@ export default function ScannerTab({ onClose }: { onClose: () => void }) {
                 />
             </div>
             
-            {/* Custom Finder Overlay */}
-            <div className="relative w-72 h-72 border-2 border-white/30 rounded-[3rem] overflow-hidden z-10 shadow-[0_0_0_1000px_rgba(0,0,0,0.6)]">
-                <div className="absolute top-0 left-0 w-full h-1 bg-blue-500 shadow-[0_0_20px_#3b82f6] animate-[scan_2s_linear_infinite]" />
-                <div className="absolute top-6 left-6 w-8 h-8 border-l-4 border-t-4 border-blue-500 rounded-tl-xl" />
-                <div className="absolute top-6 right-6 w-8 h-8 border-r-4 border-t-4 border-blue-500 rounded-tr-xl" />
-                <div className="absolute bottom-6 left-6 w-8 h-8 border-l-4 border-b-4 border-blue-500 rounded-bl-xl" />
-                <div className="absolute bottom-6 right-6 w-8 h-8 border-r-4 border-b-4 border-blue-500 rounded-br-xl" />
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+                <div className="w-64 h-64 border-2 border-white/30 rounded-3xl relative">
+                    <div className="absolute top-0 left-0 w-full h-1 bg-blue-500 shadow-[0_0_15px_#3b82f6] animate-[scan_2s_infinite]" />
+                    <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-blue-500 rounded-tl-xl" />
+                    <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-blue-500 rounded-tr-xl" />
+                    <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-blue-500 rounded-bl-xl" />
+                    <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-blue-500 rounded-br-xl" />
+                </div>
             </div>
-            
-            <p className="absolute bottom-32 text-white/70 text-sm font-medium bg-black/60 px-6 py-3 rounded-full backdrop-blur-md z-20 border border-white/10">
-                Align QR code within frame
+            <p className="absolute bottom-24 left-0 right-0 text-center text-white/70 font-medium z-10">
+               Verifying for <span className="text-white font-bold bg-white/10 px-2 py-1 rounded font-mono">{todayDate}</span>
             </p>
         </div>
       )}
 
-      {/* STATE 3: RESULT DISPLAY */}
+      {/* 3. LOADING STATE */}
+      {loading && (
+          <div className="flex-1 flex flex-col items-center justify-center bg-black">
+              <Loader2 className="w-12 h-12 text-blue-500 animate-spin mb-4" />
+              <p className="text-neutral-400 font-mono">Verifying...</p>
+          </div>
+      )}
+
+      {/* 4. SUCCESS RESULT */}
       {scanResult && (
-         <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-black animate-in slide-in-from-bottom-10 fade-in duration-300">
+         <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-black animate-in fade-in zoom-in duration-300">
              <div className="w-24 h-24 bg-green-500 rounded-full flex items-center justify-center mb-6 shadow-[0_0_50px_rgba(34,197,94,0.4)]">
                 <CheckCircle size={48} className="text-black" strokeWidth={3} />
              </div>
-             <h2 className="text-3xl font-bold text-white mb-2">Success!</h2>
-             <div className="bg-neutral-900 rounded-2xl p-4 border border-white/10 mb-8 w-full max-w-sm">
-                <p className="text-neutral-500 text-xs uppercase font-bold tracking-wider mb-1">Scanned Data</p>
-                <p className="text-white font-mono break-all">{scanResult}</p>
+             
+             <h2 className="text-3xl font-bold text-white mb-2">Allowed</h2>
+             
+             <p className="text-white font-bold text-xl mb-3">{scanResult.attendee?.name}</p>
+
+             {/* 🟢 Role and Registration Number */}
+             <div className="flex items-center justify-center gap-2 mb-8 flex-wrap">
+                {scanResult.role && (
+                    <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider border ${
+                        scanResult.role.includes("MAHE") 
+                        ? "bg-blue-500/10 text-blue-400 border-blue-500/20" 
+                        : "bg-orange-500/10 text-orange-400 border-orange-500/20"
+                    }`}>
+                        {scanResult.role}
+                    </span>
+                )}
+                {scanResult.regNumber && (
+                    <span className="bg-neutral-800 text-neutral-300 border border-white/10 px-3 py-1 rounded-full text-xs font-mono font-bold">
+                        Reg: {scanResult.regNumber}
+                    </span>
+                )}
              </div>
              
-             <div className="flex gap-3 w-full max-w-sm">
-                 <button 
-                    onClick={() => setScanResult(null)} // Go back to Idle
-                    className="flex-1 py-4 bg-neutral-800 text-white font-bold rounded-xl hover:bg-neutral-700 transition"
-                 >
-                    Done
-                 </button>
-                 <button 
-                    onClick={resetScan} // Go back to Camera immediately
-                    className="flex-1 py-4 bg-white text-black font-bold rounded-xl hover:bg-gray-200 transition"
-                 >
-                    Scan Next
-                 </button>
+             {/* Details Box */}
+             <div className="bg-neutral-900 rounded-2xl p-6 w-full max-w-sm border border-white/10 mb-8 space-y-4">
+                <div className="flex justify-between items-center border-b border-white/5 pb-4">
+                    <span className="text-neutral-500 text-sm font-medium">Event</span>
+                    <span className="text-white text-sm font-bold">{scanResult.eventName}</span>
+                </div>
+                
+                <div className="flex justify-between items-center">
+                    <span className="text-neutral-500 text-sm font-medium">Gate / Day</span>
+                    <div className="text-right">
+                        <span className="text-white text-sm font-bold block">
+                            {getDisplayDay(scanResult.day)}
+                        </span>
+                        <span className="text-neutral-500 text-xs font-mono mt-1 block">
+                            {scanResult.day}
+                        </span>
+                    </div>
+                </div>
              </div>
+             
+             <button onClick={resetScan} className="w-full max-w-sm py-4 bg-white text-black font-bold rounded-xl hover:bg-neutral-200 transition">
+                Scan Next
+             </button>
          </div>
       )}
 
+      {/* 5. ERROR RESULT */}
+      {error && (
+         <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-black animate-in fade-in zoom-in duration-300">
+             <div className="w-24 h-24 bg-red-500 rounded-full flex items-center justify-center mb-6 shadow-[0_0_50px_rgba(239,68,68,0.4)]">
+                <AlertCircle size={48} className="text-black" strokeWidth={3} />
+             </div>
+             <h2 className="text-3xl font-bold text-white mb-2">Denied</h2>
+             <p className="text-red-400 mb-8 text-lg max-w-xs mx-auto">{error}</p>
+             
+             <button onClick={resetScan} className="w-full max-w-sm py-4 bg-white text-black font-bold rounded-xl hover:bg-neutral-200 transition">
+                Try Again
+             </button>
+         </div>
+      )}
+      
       <style jsx global>{`
         @keyframes scan {
           0% { top: 0%; opacity: 0; }

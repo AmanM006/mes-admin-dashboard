@@ -1,24 +1,62 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, Filter, CheckCircle2, XCircle, Check } from "lucide-react";
-
-// Dummy Data
-const HISTORY_DATA = Array.from({ length: 20 }).map((_, i) => ({
-    id: i,
-    ticketId: `8821${i}`,
-    name: i % 2 === 0 ? "Aditya Verma" : "Rahul Sharma",
-    time: `10:${10 + i} AM`,
-    status: i % 3 === 0 ? "USED" : "ALLOWED",
-    role: i % 4 === 0 ? "NON-MAHE" : "MAHE STUDENT"
-}));
+import { Search, Filter, RefreshCw, Check, X } from "lucide-react";
+import axios from "axios";
 
 export default function HistoryTab() {
+  const [historyData, setHistoryData] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  
   const [searchTerm, setSearchTerm] = useState("");
   const [activeFilters, setActiveFilters] = useState<string[]>([]);
+  const [selectedDay, setSelectedDay] = useState("ALL");
   const [isFilterOpen, setIsFilterOpen] = useState(false);
 
+  // Pop-up Modal State
+  const [selectedTicket, setSelectedTicket] = useState<any>(null);
+
+  // 1. Fetch Real Data
+  const fetchHistory = async () => {
+    try {
+      setLoading(true);
+      // 👇 Switched to localhost for testing
+      const res = await axios.get("http://localhost:8080/api/scan/history");
+      if (res.data.success) {
+        
+        // 🟢 Data Transformation: Map regNumber and fix display days
+        const formattedData = res.data.data.map((item: any) => {
+            let displayDay = item.gate;
+            if (displayDay) {
+                if (displayDay.includes("10/2") || displayDay.includes("10 Feb")) displayDay = "Day 1";
+                else if (displayDay.includes("11/2") || displayDay.includes("11 Feb")) displayDay = "Day 2";
+                else if (displayDay.includes("12/2") || displayDay.includes("12 Feb")) displayDay = "Day 3";
+            }
+
+            return {
+                ...item,
+                ticketId: item.id || item.ticketId, // Fallback for ticket ID
+                regNumber: item.regNumber || "N/A", // 🟢 Map the Registration Number
+                role: item.role || "Unknown",
+                day: displayDay || "Unknown Day"
+            };
+        });
+
+        setHistoryData(formattedData);
+      }
+    } catch (error) {
+      console.error("Failed to fetch history", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchHistory();
+  }, []);
+
+  // 2. Toggle Logic
   const toggleFilter = (filter: string) => {
     setActiveFilters(prev => 
       prev.includes(filter) 
@@ -27,44 +65,56 @@ export default function HistoryTab() {
     );
   };
 
-  const filteredHistory = HISTORY_DATA.filter((item) => {
+  // 3. Filtering Logic
+  const filteredHistory = historyData.filter((item) => {
+    // 🟢 Update search to look for regNumber as well
     const matchesSearch = 
-        item.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-        item.ticketId.includes(searchTerm);
+        (item.name || "").toLowerCase().includes(searchTerm.toLowerCase()) || 
+        (item.regNumber || "").includes(searchTerm) || 
+        (item.ticketId || "").includes(searchTerm);
 
-    if (activeFilters.includes("ALLOWED") && item.status !== "ALLOWED") return false;
-    if (activeFilters.includes("USED") && item.status !== "USED") return false;
-    if (activeFilters.includes("MAHE") && item.role !== "MAHE STUDENT") return false;
+    if (selectedDay !== "ALL" && item.day !== selectedDay) return false;
+
+    if (activeFilters.includes("MAHE") && !item.role?.includes("MAHE STUDENT")) return false;
     if (activeFilters.includes("NON-MAHE") && item.role !== "NON-MAHE") return false;
-
     return matchesSearch;
   });
 
   return (
     <div className="min-h-full flex flex-col relative">
         
-        {/* --- LOCKED SEARCH BAR --- 
-            px-6: Matches the Header Padding perfectly
-            top-24: Locks exactly under the 96px header
-            w-full: Takes full width (no more gaps)
-        */}
+        {/* --- LOCKED SEARCH BAR & DAY SELECTOR --- */}
         <div className="sticky top-24 z-40 bg-black pt-4 pb-4 px-6 border-b border-white/10 shadow-xl w-full">
             <div className="flex items-center justify-between mb-3 px-1">
-                <h2 className="text-xl font-bold text-white">Scan History</h2>
-                <span className="text-xs font-medium text-neutral-500 bg-neutral-900 px-2 py-1 rounded-md border border-white/5">
-                    {filteredHistory.length} Results
-                </span>
+                <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                   Scan History 
+                   <button onClick={fetchHistory} className="text-neutral-600 hover:text-white transition"><RefreshCw size={14} /></button>
+                </h2>
+                
+                <div className="flex bg-neutral-900 rounded-lg p-1 border border-white/5">
+                    {['ALL', 'Day 1', 'Day 2', 'Day 3'].map((day) => (
+                        <button
+                           key={day}
+                           onClick={() => setSelectedDay(day)}
+                           className={`px-3 py-1 rounded-md text-[10px] font-bold transition-all ${
+                              selectedDay === day ? 'bg-neutral-700 text-white' : 'text-neutral-500 hover:text-neutral-300'
+                           }`}
+                        >
+                           {day === 'ALL' ? 'ALL' : day.replace(' ', '')}
+                        </button>
+                    ))}
+                </div>
             </div>
             
             <div className="relative">
+                {/* 🟢 Updated placeholder to mention Registration Number */}
                 <input 
                     type="text" 
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    placeholder="Search name or ticket ID..." 
+                    placeholder="Search name, Reg No, or ID..." 
                     className="w-full bg-neutral-900 border border-white/10 h-12 pl-10 pr-12 rounded-xl text-white text-sm focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50 transition-all placeholder:text-neutral-600"
                 />
-                
                 <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-500" size={18} />
                 
                 <button 
@@ -78,7 +128,6 @@ export default function HistoryTab() {
                     <Filter size={16} />
                 </button>
 
-                {/* Filter Dropdown (Same as before) */}
                 <AnimatePresence>
                     {isFilterOpen && (
                         <>
@@ -89,16 +138,9 @@ export default function HistoryTab() {
                                 exit={{ opacity: 0, y: 10, scale: 0.95 }}
                                 className="absolute right-0 top-14 w-60 bg-[#151515] border border-white/10 rounded-xl shadow-2xl p-2 z-[70]"
                             >
-                                <p className="text-[10px] font-bold text-neutral-500 uppercase px-3 py-2">Status</p>
-                                <FilterOption label="Allowed Only" isSelected={activeFilters.includes("ALLOWED")} onClick={() => toggleFilter("ALLOWED")} icon={CheckCircle2} color="text-green-500" />
-                                <FilterOption label="Already Used" isSelected={activeFilters.includes("USED")} onClick={() => toggleFilter("USED")} icon={XCircle} color="text-red-500" />
-                                <div className="h-px bg-white/5 my-2 mx-2" />
-                                <p className="text-[10px] font-bold text-neutral-500 uppercase px-3 py-2">Type</p>
+                                <p className="text-[10px] font-bold text-neutral-500 uppercase px-3 py-2">Filter By Type</p>
                                 <FilterOption label="MAHE Student" isSelected={activeFilters.includes("MAHE")} onClick={() => toggleFilter("MAHE")} />
                                 <FilterOption label="Non-MAHE" isSelected={activeFilters.includes("NON-MAHE")} onClick={() => toggleFilter("NON-MAHE")} />
-                                {activeFilters.length > 0 && (
-                                    <button onClick={() => setActiveFilters([])} className="w-full text-center text-xs text-neutral-500 hover:text-white py-3 mt-1 border-t border-white/5">Clear All</button>
-                                )}
                             </motion.div>
                         </>
                     )}
@@ -106,47 +148,121 @@ export default function HistoryTab() {
             </div>
         </div>
 
-        {/* RESULTS LIST - Added px-6 to align with header */}
+        {/* RESULTS LIST */}
         <div className="space-y-3 pt-4 pb-32 px-6">
-            <AnimatePresence mode="popLayout">
-                {filteredHistory.length > 0 ? (
-                    filteredHistory.map((item) => (
-                        <motion.div 
-                            key={item.id} 
-                            layout
-                            initial={{ opacity: 0, scale: 0.95 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            exit={{ opacity: 0, scale: 0.95 }}
-                            transition={{ duration: 0.2 }}
-                            className="bg-neutral-900/40 rounded-2xl p-4 border border-white/5 flex gap-4 items-center group hover:bg-neutral-900/80 transition-colors"
-                        >
-                             <div className={`w-1.5 h-10 rounded-full ${item.status === 'ALLOWED' ? 'bg-blue-500' : 'bg-neutral-700'}`} />
-                             
-                             <div className="flex-1">
-                                <div className="flex justify-between items-start mb-1">
-                                    <h3 className="font-bold text-neutral-200">{item.name}</h3>
-                                    <span className="text-xs font-mono text-neutral-500">#{item.ticketId}</span>
-                                </div>
-                                <div className="flex gap-2">
-                                    {item.status === 'ALLOWED' ? 
-                                        <Badge text="ALLOWED" color="text-green-400" bg="bg-green-500/10" border="border-green-500/20" /> : 
-                                        <Badge text="USED" color="text-red-400" bg="bg-red-500/10" border="border-red-500/20" />
-                                    }
-                                    <Badge text={item.role === 'MAHE STUDENT' ? 'MAHE' : 'NON-MAHE'} color="text-neutral-400" bg="bg-neutral-800" border="border-white/5" />
-                                </div>
-                             </div>
-                        </motion.div>
-                    ))
-                ) : (
-                    <div className="py-12 text-center text-neutral-500">
-                        <p>No scans found.</p>
-                        {activeFilters.length > 0 && (
-                            <button onClick={() => setActiveFilters([])} className="text-blue-500 text-sm mt-2">Clear filters</button>
-                        )}
-                    </div>
-                )}
-            </AnimatePresence>
+            {loading ? (
+                <div className="text-center py-10 text-neutral-500 text-sm animate-pulse">Loading records...</div>
+            ) : (
+                <AnimatePresence mode="popLayout">
+                    {filteredHistory.length > 0 ? (
+                        filteredHistory.map((item, i) => (
+                            <motion.div 
+                                key={item.id + item.time + i}
+                                layout
+                                onClick={() => setSelectedTicket(item)} 
+                                initial={{ opacity: 0, scale: 0.95 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                className="bg-neutral-900/40 rounded-2xl p-4 border border-white/5 flex gap-4 items-center group hover:bg-neutral-900/80 transition-all cursor-pointer active:scale-[0.98]"
+                            >
+                                 <div className="w-1.5 h-10 rounded-full bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.5)]" />
+                                 
+                                 <div className="flex-1">
+                                    <div className="flex justify-between items-start mb-1">
+                                        <h3 className="font-bold text-neutral-200">{item.name}</h3>
+                                        {/* 🟢 Displays Registration Number instead of Ticket ID */}
+                                        <span className="text-xs font-mono text-neutral-500">{item.regNumber}</span>
+                                    </div>
+                                    <div className="flex flex-wrap gap-2 items-center">
+                                        <Badge text={item.day} color="text-white" bg="bg-neutral-800" border="border-white/10" />
+                                        <Badge text={item.time} color="text-neutral-400" bg="bg-transparent" border="border-transparent" />
+                                        <span className="text-[10px] text-neutral-600 px-1">•</span>
+                                        <span className="text-[10px] font-bold text-neutral-500">{item.role}</span>
+                                    </div>
+                                 </div>
+                            </motion.div>
+                        ))
+                    ) : (
+                        <div className="py-12 text-center text-neutral-500">
+                            <p>No scans found.</p>
+                        </div>
+                    )}
+                </AnimatePresence>
+            )}
         </div>
+
+        {/* 🟢 TICKET DETAILS MODAL (Pop-up) */}
+        <AnimatePresence>
+        {selectedTicket && (
+            <>
+                <motion.div 
+                    initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                    onClick={() => setSelectedTicket(null)}
+                    className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100]"
+                />
+                
+                <motion.div 
+                    initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
+                    transition={{ type: "spring", damping: 25, stiffness: 300 }}
+                    className="fixed bottom-0 left-0 right-0 bg-[#111] rounded-t-[32px] p-6 z-[110] border-t border-white/10 shadow-2xl"
+                >
+                    <div className="w-12 h-1.5 bg-neutral-700 rounded-full mx-auto mb-6" />
+                    
+                    <div className="flex justify-between items-start mb-6">
+                        <div>
+                            <h2 className="text-2xl font-bold text-white">{selectedTicket.name}</h2>
+                            {/* 🟢 Registration Number & Sub ID */}
+                            <div className="flex flex-col gap-1 mt-2">
+                                <p className="text-neutral-400 font-mono text-sm">
+                                    Reg: <span className="text-white">{selectedTicket.regNumber || "N/A"}</span>
+                                </p>
+                                <p className="text-neutral-600 font-mono text-xs">
+                                    Ticket ID: {selectedTicket.ticketId || selectedTicket.id || "N/A"}
+                                </p>
+                            </div>
+                        </div>
+                        <button 
+                            onClick={() => setSelectedTicket(null)} 
+                            className="p-2 bg-white/10 rounded-full text-white hover:bg-white/20 transition h-fit"
+                        >
+                            <X size={20} />
+                        </button>
+                    </div>
+
+                    <div className="space-y-4 mb-8">
+                        <div className="p-4 bg-black rounded-2xl border border-white/10 flex justify-between items-center">
+                            <span className="text-neutral-400 font-medium">Status</span>
+                            <span className="text-green-500 font-bold uppercase tracking-wide text-sm bg-green-500/10 px-3 py-1 rounded-lg">
+                                ENTRY ALLOWED
+                            </span>
+                        </div>
+
+                        <div className="p-4 bg-black rounded-2xl border border-white/10 flex justify-between items-center">
+                            <span className="text-neutral-400 font-medium">Type</span>
+                            <span className="text-white font-bold text-sm uppercase">{selectedTicket.role}</span>
+                        </div>
+
+                        <div className="p-4 bg-black rounded-2xl border border-white/10 flex justify-between items-center">
+                            <span className="text-neutral-400 font-medium">Time</span>
+                            <span className="text-white font-mono text-lg">{selectedTicket.time}</span>
+                        </div>
+
+                        <div className="p-4 bg-black rounded-2xl border border-white/10 flex justify-between items-center">
+                            <span className="text-neutral-400 font-medium">Day / Gate</span>
+                            <span className="text-white font-bold text-lg">{selectedTicket.day}</span>
+                        </div>
+                    </div>
+
+                    <button 
+                        onClick={() => setSelectedTicket(null)}
+                        className="w-full py-4 bg-white text-black font-bold rounded-2xl text-lg hover:bg-neutral-200 active:scale-95 transition-all shadow-[0_0_20px_rgba(255,255,255,0.1)] mb-4"
+                    >
+                        Close
+                    </button>
+                </motion.div>
+            </>
+        )}
+      </AnimatePresence>
+
     </div>
   );
 }
